@@ -1,0 +1,2 @@
+gcc = Compiler("gcc", "-v")
+gcc.compile("")
