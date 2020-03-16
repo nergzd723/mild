@@ -1,5 +1,7 @@
 import os
 import sys
+import termcolor
+import time
 # Common class for compilers
 class Compiler:
     # Compilers take ONE positional argument. No more than that.
@@ -39,7 +41,6 @@ class MildCC:
                 files = [f for f in os.listdir('.') if os.path.isfile(f)]
                 for f in files:
                     ft = os.path.splitext(f)[0]
-                    print(ft)
                     if ft == target[:-2]:
                         ext = os.path.splitext(f)[1]
                         exty = ext[1:]
@@ -49,17 +50,29 @@ class MildCC:
                             CC.compile(target[:-2])
             else:
                 raise NotImplementedError("Not now, not noooooww...")
+    def setcompiler(self, compiler, extension):
+        # Compiler needs to be updated
+        if extension in self.knownextensions:
+            extindex = self.knownextensions.index(extension)
+            self.compilerforext[extindex] = compiler
+        # New compiler for new extension
+        else:
+            self.knownextensions.append(extension)
+            self.compilerforext.append(compiler)
     def parsemildlist(self):
         Generate = self.generate
+        SetCompiler = self.setcompiler
         try:
             mildlist = open(self.mildfile+self.mildprefix, "r")
         except:
             print("mild: no mildlists found")
             print("mild: no targets")
             exit(1)
-        ctr = 0
+        starttime = time.time()
         for line in mildlist:
             exec(line)
+        endtime = time.time()
+        termcolor.cprint("mild: done processing target {} in {} seconds".format(self.mildfile, str(round(endtime-starttime, 2))))
     
 if __name__ == "__main__":
     mild = MildCC("mild")
