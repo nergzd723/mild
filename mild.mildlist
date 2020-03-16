@@ -1,3 +1,4 @@
-Generate("cppfile.o", "cfile.o")
+Generate("cppfile.o")
 clang = Compiler("clang", "argument.extension", "-o", "argument.o", "c")
 Generate("clangcfile.o")
+Generate("cfile")

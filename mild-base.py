@@ -1,6 +1,7 @@
 import os
 import sys
 import termcolor
+from threading import Thread
 import time
 # Common class for compilers
 class Compiler:
@@ -17,7 +18,7 @@ class Compiler:
         ccline = ccline.replace(".extension", "."+self.extension)
         os.system(ccline)
 class MildCC:
-    def __init__(self, mildlist):
+    def __init__(self, mildlist, multithreading):
         # Base cli args from console
         self.cliargs = sys.argv[1:]
         # Common name for mild file, mild.mildlist(like Makefile or smth)
@@ -33,6 +34,10 @@ class MildCC:
 
         # A list with compilers for the extensions above, must be strictly tied to knownext, e.g. "c" entry index is 0 in knownext, so gcc must have index 0 in compilerforext
         self.compilerforext = [gcc, gpp]
+
+        self.multithreading_targets = []
+        self.multithreading = multithreading
+        self.multithreading_threads = []
     def generate(self, *targets):
         for target in targets:
             print("mild: generating {} for target {}".format(target, self.mildfile)) 
@@ -49,7 +54,15 @@ class MildCC:
                             CC = self.compilerforext[extindex]
                             CC.compile(target[:-2])
             else:
-                raise NotImplementedError("Not now, not noooooww...")
+                termcolor.cprint("mild: dependency building, dependency {} for target {}".format(target, self.mildfile), "blue")
+                mcc = MildCC(target, self.multithreading)
+                mcc.parsemildlist()
+    def generatequeue(self, *targets):
+        for target in targets:
+            process = Thread(target=self.generate, args=[target])
+            process.start()
+            self.multithreading_threads.append(process)
+    # Common set compiler for MildCC class
     def setcompiler(self, compiler, extension):
         # Compiler needs to be updated
         if extension in self.knownextensions:
@@ -60,7 +73,12 @@ class MildCC:
             self.knownextensions.append(extension)
             self.compilerforext.append(compiler)
     def parsemildlist(self):
-        Generate = self.generate
+        if self.multithreading:
+            # Use queued method to multithread, but deps sometimes are slower than main target
+            Generate = self.generatequeue
+        else:
+            # Use common
+            Generate = self.generate
         SetCompiler = self.setcompiler
         try:
             mildlist = open(self.mildfile+self.mildprefix, "r")
@@ -72,9 +90,12 @@ class MildCC:
         for line in mildlist:
             exec(line)
         endtime = time.time()
-        termcolor.cprint("mild: done processing target {} in {} seconds".format(self.mildfile, str(round(endtime-starttime, 2))))
-    
+        termcolor.cprint("mild: done processing target {} in {} seconds".format(self.mildfile, str(round(endtime-starttime, 2))), "green")
+        if self.multithreading:
+            # Wait for all threads to end
+            for process in self.multithreading_threads:
+                process.join()
 if __name__ == "__main__":
-    mild = MildCC("mild")
+    mild = MildCC("mild", 1)
     mild.parsemildlist()
     exit(1)
