@@ -3,6 +3,12 @@ import sys
 import termcolor
 from threading import Thread
 import time
+# Common class for CC errors
+class Error:
+    def __init__(self, Error):
+        termcolor.cprint("mild: fatal error: "+Error, "red")
+        termcolor.cprint("mild: can't recover, exiting", "red")
+        exit(1)
 # Common class for compilers
 class Compiler:
     # Compilers take ONE positional argument. No more than that.
@@ -18,7 +24,7 @@ class Compiler:
         ccline = ccline.replace(".extension", "."+self.extension)
         os.system(ccline)
 class MildCC:
-    def __init__(self, mildlist, multithreading):
+    def __init__(self, mildlist, multithreading, asyncthreads):
         # Base cli args from console
         self.cliargs = sys.argv[1:]
         # Common name for mild file, mild.mildlist(like Makefile or smth)
@@ -31,18 +37,17 @@ class MildCC:
         self.knownextensions = ["c", "cpp"]
         gcc = Compiler("gcc", "-O3", "argument.extension", "-o", "argument.o", "c")
         gpp = Compiler("g++", "-O3", "argument.extension", "-o", "argument.o", "cpp")
-
+        self.outextensions = [".o", ".mildlist"]
         # A list with compilers for the extensions above, must be strictly tied to knownext, e.g. "c" entry index is 0 in knownext, so gcc must have index 0 in compilerforext
         self.compilerforext = [gcc, gpp]
-
-        self.multithreading_targets = []
+        self.multithreading_async = asyncthreads
         self.multithreading = multithreading
         self.multithreading_threads = []
     def generate(self, *targets):
         for target in targets:
             print("mild: generating {} for target {}".format(target, self.mildfile)) 
             if target[-2:] == ".o":
-                print("mild: assume {} is an file".format(target))
+                #print("mild: assume {} is an file".format(target))
                 files = [f for f in os.listdir('.') if os.path.isfile(f)]
                 for f in files:
                     ft = os.path.splitext(f)[0]
@@ -53,15 +58,32 @@ class MildCC:
                             extindex = self.knownextensions.index(exty)
                             CC = self.compilerforext[extindex]
                             CC.compile(target[:-2])
+                        else:
+                            if ext in self.outextensions:
+                                pass
+                            else:
+                                raise Error("no compiler for extension {} for target {}".format(ext, target))
             else:
                 termcolor.cprint("mild: dependency building, dependency {} for target {}".format(target, self.mildfile), "blue")
-                mcc = MildCC(target, self.multithreading)
+                mcc = MildCC(target, self.multithreading, self.multithreading_async)
                 mcc.parsemildlist()
     def generatequeue(self, *targets):
         for target in targets:
-            process = Thread(target=self.generate, args=[target])
-            process.start()
-            self.multithreading_threads.append(process)
+            if target[-2:] == ".o":
+                continue
+            else:
+                process = Thread(target=self.generate, args=[target])
+                process.start()
+                self.multithreading_threads.append(process)
+        for thr in self.multithreading_threads:
+            if self.multithreading_async:
+                continue
+            thr.join()
+        for target in targets:
+            if target[-2:] == ".o":
+                process = Thread(target=self.generate, args=[target])
+                process.start()
+                self.multithreading_threads.append(process)
     # Common set compiler for MildCC class
     def setcompiler(self, compiler, extension):
         # Compiler needs to be updated
@@ -89,13 +111,13 @@ class MildCC:
         starttime = time.time()
         for line in mildlist:
             exec(line)
-        endtime = time.time()
-        termcolor.cprint("mild: done processing target {} in {} seconds".format(self.mildfile, str(round(endtime-starttime, 2))), "green")
         if self.multithreading:
             # Wait for all threads to end
             for process in self.multithreading_threads:
                 process.join()
+        endtime = time.time()
+        termcolor.cprint("mild: done processing target {} in {} seconds".format(self.mildfile, str(round(endtime-starttime, 2))), "green")
 if __name__ == "__main__":
-    mild = MildCC("mild", 1)
+    mild = MildCC("mild", 1, 0)
     mild.parsemildlist()
     exit(1)
