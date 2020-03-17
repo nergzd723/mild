@@ -1,10 +1,26 @@
+#    mild: build system in python3
+#    Copyright (C) 2020 Mark Hargreaves
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import os
 import sys
 import termcolor
 from threading import Thread
 import time
 # Common class for CC errors
-class Error:
+class MildError:
     def __init__(self, Error):
         termcolor.cprint("mild: fatal error: "+Error, "red")
         termcolor.cprint("mild: can't recover, exiting", "red")
@@ -40,8 +56,11 @@ class MildCC:
         self.outextensions = [".o", ".mildlist"]
         # A list with compilers for the extensions above, must be strictly tied to knownext, e.g. "c" entry index is 0 in knownext, so gcc must have index 0 in compilerforext
         self.compilerforext = [gcc, gpp]
+        # Is the multithreading asynchronous?
         self.multithreading_async = asyncthreads
+        # Multithreading state, 1 or 0
         self.multithreading = multithreading
+        # Variable for threads, used for listing them to wait for threads to end
         self.multithreading_threads = []
     def generate(self, *targets):
         for target in targets:
@@ -62,13 +81,14 @@ class MildCC:
                             if ext in self.outextensions:
                                 pass
                             else:
-                                raise Error("no compiler for extension {} for target {}".format(ext, target))
+                                raise MildError("no compiler for extension {} for target {}".format(ext, target))
             else:
                 termcolor.cprint("mild: dependency building, dependency {} for target {}".format(target, self.mildfile), "blue")
                 mcc = MildCC(target, self.multithreading, self.multithreading_async)
                 mcc.parsemildlist()
     def generatequeue(self, *targets):
         for target in targets:
+            # Skip files, since we need dependencies to build first
             if target[-2:] == ".o":
                 continue
             else:
@@ -76,10 +96,12 @@ class MildCC:
                 process.start()
                 self.multithreading_threads.append(process)
         for thr in self.multithreading_threads:
+        # Wait for threads to end
             if self.multithreading_async:
-                continue
+                break
             thr.join()
         for target in targets:
+            # Now generating files
             if target[-2:] == ".o":
                 process = Thread(target=self.generate, args=[target])
                 process.start()
@@ -94,13 +116,18 @@ class MildCC:
         else:
             self.knownextensions.append(extension)
             self.compilerforext.append(compiler)
+    def sync(self):
+        # synchronise all threads
+        for thread in self.multithreading_threads:
+            thread.join()
     def parsemildlist(self):
         if self.multithreading:
-            # Use queued method to multithread, but deps sometimes are slower than main target
+            # Use queued method to multithread
             Generate = self.generatequeue
         else:
-            # Use common
+            # Use common way to build, in order, but the order still presents if you execute Generate multiple times
             Generate = self.generate
+        Sync = self.sync
         SetCompiler = self.setcompiler
         try:
             mildlist = open(self.mildfile+self.mildprefix, "r")
@@ -118,6 +145,14 @@ class MildCC:
         endtime = time.time()
         termcolor.cprint("mild: done processing target {} in {} seconds".format(self.mildfile, str(round(endtime-starttime, 2))), "green")
 if __name__ == "__main__":
-    mild = MildCC("mild", 1, 0)
+    print("mild Copyright (C) 2020  Mark Hargreaves\nThis program comes with ABSOLUTELY NO WARRANTY;\nThis is free software, and you are welcome to redistribute it\nunder certain conditions; see LICENSE.txt for details")
+    args = sys.argv[1:]
+    multithreadstate = 0
+    asyncthreads = 0
+    if "-M" in args:
+        multithreadstate = 1
+    if "--async" in args:
+        asyncthreads = 1
+    mild = MildCC("mild", multithreadstate, asyncthreads)
     mild.parsemildlist()
-    exit(1)
+    exit(0)

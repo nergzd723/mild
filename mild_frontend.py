@@ -2,7 +2,7 @@ import importlib
 import sys
 
 if __name__ == "__main__":
-    mb = importlib.import_module("mild-base")
+    mb = importlib.import_module("mild_base")
     args = sys.argv[1:]
     multithreadstate = 0
     asyncthreads = 0
